@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Adventure Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow: hidden; 
+        }
+        h1 {
+            color: #333;
+        }
+        #hint {
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #555;
+        }
+        #game {
+            width: 100%;
+            max-width: 800px;
+            height: 600px;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            background-color: #fff;
+            overflow-y: scroll;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            white-space: pre;
+        }
+        #input-container {
+            display: flex;
+            width: 100%;
+            max-width: 800px;
+        }
+        #input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 10px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(6, 1fr);
+            gap: 5px;
+        }
+        .cell {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        .player { color: #007bff; }
+        .wall { background-color: #ccc; }
+        .dragon { color: red; }
+        .celebration {
+            font-size: 30px;
+            color: gold;
+            animation: celebration 1s ease-in-out forwards;
+        }
+        @keyframes celebration {
+            0% { transform: scale(1); opacity: 0; }
+            50% { transform: scale(1.5); opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            opacity: 0.8;
+            pointer-events: none; /* Prevent interaction */
+            animation: fall 3s forwards;
+        }
+        @keyframes fall {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(100vh); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Text Adventure Game</h1>
+    <div id="hint">Hint: Use W, A, S, D to move. Type commands like "attack sword", "attack gun", "get [item]", or "help".</div>
+    <div id="game"></div>
+    <div id="input-container">
+        <input type="text" id="input" placeholder="Enter command..." onfocus="disableMovement()">
+        <button onclick="processCommand()">Send</button>
+    </div>
+
+    <script>
+        const gameLog = document.getElementById('game');
+        const gridSize = 10;
+        let playerPosition = { x: 0, y: 0 };
+        const walls = [{ x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }];
+        const dragonPosition = { x: 3, y: 3 };
+        let inventory = [];
+        let dragonHealth = 100;
+        let playerHealth = 100;
+        let shieldActive = false;
+        let gameActive = true; 
+
+        function displayGame() {
+            gameLog.innerHTML = '';
+            const grid = document.createElement('div');
+            grid.className = 'grid';
+
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if (playerPosition.x === x && playerPosition.y === y) {
+                        cell.innerHTML = 'H';
+                        cell.classList.add('player');
+                    } else if (walls.some(wall => wall.x === x && wall.y === y)) {
+                        cell.innerHTML = 'W';
+                        cell.classList.add('wall');
+                    } else if (dragonPosition.x === x && dragonPosition.y === y) {
+                        cell.innerHTML = 'D';
+                        cell.classList.add('dragon');
+                    } else {
+                        cell.innerHTML = '.';
+                    }
+                    grid.appendChild(cell);
+                }
+            }
+            gameLog.appendChild(grid);
+        }
+
+        function moveTo(x, y) {
+            if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return;
+            if (walls.some(wall => wall.x === x && wall.y === y)) return;
+
+            playerPosition.x = x;
+            playerPosition.y = y;
+
+            if (playerPosition.x === dragonPosition.x && playerPosition.y === dragonPosition.y) {
+                displayMessage('You encountered a dragon! Prepare for battle!');
+                battleWithDragon();
+                return;
+            }
+
+            displayGame();
+        }
+
+        function battleWithDragon() {
+            displayMessage('Dragon Health: ' + dragonHealth);
+            displayMessage('Your Health: ' + playerHealth);
+        }
+
+        function processCommand() {
+            const input = document.getElementById('input').value.toLowerCase();
+            document.getElementById('input').value = '';
+            displayMessage('You: ' + input);
+
+            if (input.startsWith('get')) {
+                const item = input.split(' ')[1];
+                if (item) {
+                    inventory.push(item);
+                    displayMessage(`You obtained a ${item}!`);
+                } else {
+                    displayMessage('Please specify the item name to get.');
+                }
+            } else if (input.startsWith('attack')) {
+                const weapon = input.split(' ')[1];
+                if (inventory.includes(weapon)) {
+                    handleAttack(weapon);
+                } else {
+                    displayMessage(`You need to get a ${weapon} first!`);
+                }
+            } else if (input === 'shield') {
+                shieldActive = true;
+                displayMessage('You activated your shield! It will block the next attack.');
+            } else if (input === 'inventory') {
+                displayMessage('Your inventory: ' + inventory.join(', ') || 'Empty');
+            } else if (input === 'help') {
+                displayMessage('Available commands: get [item], attack [sword/gun/gold], shield, inventory, help');
+            } else if (input === 'get sword') {
+                inventory.push('sword');
+                displayMessage('You obtained a sword!');
+            } else if (input === 'get gun') {
+                inventory.push('gun');
+                displayMessage('You obtained a gun!');
+            } else if (input === 'get gold') {
+                inventory.push('gold');
+                displayMessage('You obtained gold!');
+            } else {
+                displayMessage('Unknown command.');
+            }
+        }
+
+        function handleAttack(weapon) {
+            if (weapon === 'sword') {
+                dragonHealth -= 20;
+                displayMessage('You attacked the dragon with the sword! Dragon Health: ' + dragonHealth);
+            } else if (weapon === 'gun') {
+                const misfireChance = Math.random() < 0.2;
+                if (misfireChance) {
+                    playerHealth -= 50;
+                    displayMessage('The gun misfired! You took 50 damage. Your Health: ' + playerHealth);
+                    if (playerHealth <= 0) {
+                        displayMessage('You die! Game over.');
+                        restartGame();
+                        return;
+                    }
+                } else {
+                    dragonHealth -= 50;
+                    displayMessage('You shot the dragon with the gun! Dragon Health: ' + dragonHealth);
+                }
+            } else if (weapon === 'gold') {
+                if (inventory.includes('gold')) {
+                    displayMessage('You bribed the dragon with gold! 🎉 You win!');
+                    celebrate('bribe');
+                    return;
+                } else {
+                    displayMessage('You do not have gold in your inventory.');
+                }
+            } else {
+                displayMessage('Unknown weapon. Use "sword", "gun", or "gold".');
+            }
+
+            if (dragonHealth <= 0) {
+                displayMessage('You defeated the dragon! 🎉');
+                celebrate('victory');
+            } else {
+                dragonAttack();
+            }
+        }
+
+        function dragonAttack() {
+            let attackType = Math.random() < 0.5 ? 'fire' : 'claw';
+
+            if (shieldActive) {
+                displayMessage('Your shield blocked the dragon\'s attack!');
+                shieldActive = false;
+            } else {
+                let damage;
+                if (attackType === 'fire') {
+                    damage = 40;
+                    displayMessage('The dragon breathes fire! You take ' + damage + ' damage.');
+                } else {
+                    damage = 20;
+                    displayMessage('The dragon slashes you with its claws! You take ' + damage + ' damage.');
+                }
+                playerHealth -= damage;
+                displayMessage('Your Health: ' + playerHealth);
+                
+                if (playerHealth <= 0) {
+                    displayMessage('You die! Game over.');
+                    gameActive = false;
+                    displayRestartPrompt();
+                }
+            }
+        }
+
+        function displayMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.innerHTML = message;
+            gameLog.appendChild(messageElement);
+            gameLog.scrollTop = gameLog.scrollHeight;
+        }
+
+        function celebrate(type) {
+            const celebrationMessage = document.createElement('div');
+            celebrationMessage.className = 'celebration';
+            celebrationMessage.innerHTML = type === 'victory' 
+                ? '🎉 Congratulations! You won! 🎉' 
+                : '🎉 You successfully bribed the dragon! 🎉';
+            gameLog.appendChild(celebrationMessage);
+            gameLog.scrollTop = gameLog.scrollHeight;
+
+            createConfetti();
+            setTimeout(displayRestartPrompt, 2000);
+        }
+
+        function createConfetti() {
+            const confettiCount = 100;
+            for (let i = 0; i < confettiCount; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.backgroundColor = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 1)`;
+                confetti.style.left = `${Math.random() * window.innerWidth}px`;
+                confetti.style.top = `${Math.random() * window.innerHeight}px`;
+                document.body.appendChild(confetti);
+
+             
+                setTimeout(() => {
+                    confetti.style.transform = `translateY(${window.innerHeight}px)`;
+                }, 10);
+
+                
+                setTimeout(() => {
+                    confetti.remove();
+                }, 3000);
+            }
+        }
+
+        function displayRestartPrompt() {
+            const restartMessage = document.createElement('div');
+            restartMessage.innerHTML = 'Do you want to play again? (Press Y for Yes, N for No)';
+            gameLog.appendChild(restartMessage);
+            gameLog.scrollTop = gameLog.scrollHeight;
+        }
+
+        
+        document.addEventListener('keydown', function(event) {
+            if (!gameActive) {
+                if (event.key === 'y') {
+                    restartGame();
+                } else if (event.key === 'n') {
+                    displayMessage('Thank you for playing!');
+                    document.removeEventListener('keydown', arguments.callee);
+                }
+            }
+        });
+
+        function restartGame() {
+            playerPosition = { x: 0, y: 0 };
+            dragonHealth = 100;
+            playerHealth = 100;
+            inventory = [];
+            shieldActive = false;
+            displayGame();
+            displayMessage('Game restarted. You can start again!');
+            enableMovement();
+        }
+
+        // Add event listeners for input focus and blur
+        const inputField = document.getElementById('input');
+
+        inputField.addEventListener('focus', disableMovement);
+        inputField.addEventListener('blur', enableMovement);
+
+        // Movement functions
+        function disableMovement() {
+            document.removeEventListener('keydown', handleMovement);
+        }
+
+        function enableMovement() {
+            document.addEventListener('keydown', handleMovement);
+        }
+
+        // Movement handling
+        function handleMovement(event) {
+            if (gameActive) { // Only allow movement if the game is active
+                switch (event.key) {
+                    case 'w':
+                    case 'W':
+                        moveTo(playerPosition.x, playerPosition.y - 1); // Move up
+                        break;
+                    case 'a':
+                    case 'A':
+                        moveTo(playerPosition.x - 1, playerPosition.y); // Move left
+                        break;
+                    case 's':
+                    case 'S':
+                        moveTo(playerPosition.x, playerPosition.y + 1); // Move down
+                        break;
+                    case 'd':
+                    case 'D':
+                        moveTo(playerPosition.x + 1, playerPosition.y); // Move right
+                        break;
+                    case 'Enter':
+                        processCommand(); 
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        displayGame();
+        enableMovement(); 
+        inputField.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                processCommand();
+            }
+        });
+    </script>
+</body>
+</html>
